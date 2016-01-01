@@ -1,55 +1,173 @@
 ;;; ac-unicode.el --- auto-complete source of Hipchat nicks
-
+;;;
+;;; Copyright (C) 2016 Torstein Krause Johansen
+;;;
+;;; This program is free software: you can redistribute it and/or
+;;; modify it under the terms of the GNU General Public License as
+;;; published by the Free Software Foundation, either version 3 of the
+;;; License, or (at your option) any later version.
+;;;
+;;; This program is distributed in the hope that it will be useful,
+;;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+;;; General Public License for more details.
+;;;
+;;; You should have received a copy of the GNU General Public License
+;;; along with this program.  If not, see
+;;; <http://www.gnu.org/licenses/>.
+;;;
 ;;; Commentary:
+;;;
+;;; Add the following to your .emacs:
+;;;
+;;; (setq ac-hipchat-nick-auth-token "foobar")
+;;; (ac-hipchat-nick-set-current-room "all")
+;;;
+;;; Then, in the buffer where you want HipChat nick completion, run
+;;; ac-hipchat-nick-setup.
 
 ;;; Code:
 
-(require 'cl-lib)
 (require 'auto-complete)
+(require 'json)
 
 (defgroup ac-hipchat-nick nil
-  "auto-complete source of Hipchat-Nick."
-  :group 'auto-complete)
+  "Auto completion of HipChat nicks (mention names)."
+  :group 'auto-complete
+  :prefix "ac-hipchat-nick-")
 
-;; This file is generated automatically. Don't change this file !!
-(setq ac-hipchat-nick--data
-      '((:nick "Ivey" :name "Ivey Rashid" :description "Scrumm master WF")
-        (:nick "shajedul" :name "Shajedul Islam" :description "")
-        (:nick "nahid" :name "Nahid E Mahbub" :description "")
-        (:nick "Fariyah" :name "Tasnim Fariyah" :description "")
-        (:nick "KibriaKaderi" :name "Kibria Kaderi" :description "")
-        (:nick "anwar" :name "Sk Mohd Anwarul Islam" :description "")
-        (:nick "Fasihul" :name "Fasihul Kabir" :description "")
-        (:nick "Mustafa" :name "Mustafa Sariyar" :description "")
-        (:nick "Imran" :name "Imran Chowdhury" :description "")
-        (:nick "Ryana" :name "Ryana Quadir" :description "")
-        (:nick "simen" :name "Simen Haagenrud" :description "")
-        (:nick "KevinFlynn" :name "Kevin Flynn" :description "")
-        (:nick "Apu" :name "Moshlehuddin Mazumder Apu" :description "")
-        (:nick "TitliRoy" :name "Titli Roy" :description "")
-        (:nick "mogsie" :name "Erik Mogensen" :description "")
-        (:nick "torstein" :name "Torstein Krause Johansen" :description "")
-        (:nick "Shihab" :name "Hasan Shihab Uddin" :description "")
-        (:nick "Sohel" :name "Md. Asraful Haque" :description "")
-        (:nick "rakib" :name "S. M. Rakibul Islam" :description "")
-        ))
+(defcustom ac-hipchat-nick-auth-token
+  "foo"
+  "The API auth token you've created for your HipChat user."
+  :type 'string
+  :group 'ac-hipchat-nick)
 
-(defvar ac-hipchat-nick--candidates
-  (cl-loop for hipchat-nick in ac-hipchat-nick--data
-           collect
-           (popup-make-item (plist-get hipchat-nick :nick)
-                            :summary (plist-get hipchat-nick :name)
-                            :document (plist-get hipchat-nick :description)
-                            )))
+(defcustom ac-hipchat-nick-url
+  "https://api.hipchat.com"
+  "The URL of your HipChat server."
+  :type 'string
+  :group 'ac-hipchat-nick)
 
-;;;###autoload
+(defun ahn--fetch-json (url)
+  "Fetches the URL and will return it as a JSON object."
+  (with-current-buffer
+      (url-retrieve-synchronously url)
+
+    ;; Manually removing the HTTP headers since
+    ;; url-http-end-of-headers no longer exists. 2016-01-12
+    (goto-char (point-min))
+    (re-search-forward "{")
+    (delete-region (- (point) 1) (point-min))
+
+    ;; Hack because of a bug in Emacs' json.el which doesn't parse the
+    ;; Hipchat response correctly unless there's a space after the
+    ;; opening brace (!)
+    (save-excursion
+      (goto-char 2)
+      (insert " "))
+
+    ;; This was useful for debugging
+    ;;    (message (substring (buffer-string) 0 20))
+
+    (json-read-object)))
+
+(defun ahn--hipchat-add-auth (url)
+  "Add auth parameter to the passed URL."
+  (concat url "?auth_token=" ac-hipchat-nick-auth-token))
+
+(defun ahn--hipchat-all-rooms-url ()
+  "Return the URL of all the rooms."
+  (concat ac-hipchat-nick-url
+          "/v2/room" "?auth_token="
+          ac-hipchat-nick-auth-token))
+
+(defun ahn--hipchat-room-list ()
+  "Will return an list of all the room names and URLs."
+  (mapcar
+   (lambda (x)
+     (cons (cdr (assoc 'name x))
+           (cdr (assoc 'self (assoc 'links x)))))
+   (cdr (assoc 'items (ahn--fetch-json (ahn--hipchat-all-rooms-url))))))
+
+;; (pp (ahn--hipchat-room-list))
+
+(defun ahn--hipchat-users-in-room (room-url)
+  "Return a list of alists with name & mention name for users in ROOM-URL."
+  (mapcar
+   (lambda (x)
+     (list
+      (assoc 'name x)
+      (assoc 'mention_name x)))
+   (cdr
+    (assoc 'participants
+           (ahn--fetch-json (ahn--hipchat-add-auth room-url))))))
+
+(defun ahn--hipchat-nick-list (room-name)
+  "Return nick list of the participants in ROOM-NAME."
+  (let (result-list
+        (tmp-list
+         (mapcar
+          (lambda (x)
+            (if (string= (downcase (car x))
+                         (downcase room-name))
+                (ahn--hipchat-users-in-room (cdr x))))
+          (ahn--hipchat-room-list))))
+
+    ;; Create result list without nil elements.
+    (while tmp-list
+      (let ((head (pop tmp-list)))
+        (if head (push head result-list))))
+    result-list))
+
+;; (ahn--hipchat-nick-list "all")
+
+(defun ahn--hipchat-nick-candidates (room-name)
+  "Create a list of nicks and user names in ROOM-NAME."
+  (car
+   (mapcar
+    (lambda (y)
+      ;; Only create popup items of the non-nil elements returned from
+      ;; ahn--hipchat-nick-list
+      (if y
+          (mapcar
+           (lambda (x)
+             (progn
+               (popup-make-item
+                (cdr (assoc 'mention_name x))
+                :summary (cdr (assoc 'name x))
+
+                ;; To include extra information in the lagging
+                ;; tooltip, add it to the :document property like
+                ;; this:
+                ;;
+                ;; :document (cdr (assoc 'name x))
+                )))
+           y)))
+    (ahn--hipchat-nick-list room-name))))
+
+;; (ahn--hipchat-nick-candidates "all")
+
+(defvar ahn--current-room-candidates
+  "Local cache of the canidate nicks of the currently selected room."
+  nil)
+
+(defun ac-hipchat-nick-set-current-room (room)
+  "Populate the nick completion list to the given ROOM."
+  (interactive "sRoom name: ")
+  (setq ahn--current-room-candidates (ahn--hipchat-nick-candidates room))
+  t)
+
+;; (ac-hipchat-nick-set-current-room "all")
+
+(defvar ac-source-hipchat-nick
+  '((candidates . ahn--current-room-candidates)
+    (prefix . "@\\(.*\\)")
+    (cache)))
+
 (defun ac-hipchat-nick-setup ()
+  "Set up ac-hipchat-nick."
   (interactive)
   (add-to-list 'ac-sources 'ac-source-hipchat-nick))
-
-(ac-define-source hipchat-nick
-  '((candidates . ac-hipchat-nick--candidates)
-    (prefix . "@\\(.*\\)")))
 
 (provide 'ac-hipchat-nick)
 
