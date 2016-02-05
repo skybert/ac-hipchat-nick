@@ -1,5 +1,13 @@
 auto-complete backend for entering HipChat nicks (aka mention names).
 
+## Background
+
+We use HipChat at work and I use Emacs/ERC as my chat client. Since
+HipChat doesn't expose the mention names as XMPP nicks (which would
+have been SO nice), I looked around for a plugin which allowed me to
+lookup the nicks/mention names of the people in the room. Since I
+didn't find any such plugin, I wrote one.
+
 ## Usage
 
 First off, you'll need to create a HipChat API auth token, you can
@@ -33,3 +41,12 @@ all the users in the current room.
 
 Please do, the code is released under GPLv3, see [LICENSE](LICENSE)
 for further details.
+
+## Enjoy
+
+There are probably a league of improvements that can be done to my
+newbie elisp code, suggestions are most welcome.
+
+Cheers,
+
+-Torstein
