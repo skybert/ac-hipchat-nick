@@ -136,25 +136,21 @@
       (if y
           (mapcar
            (lambda (x)
-             (progn
-               (popup-make-item
-                (cdr (assoc 'mention_name x))
-                :summary (cdr (assoc 'name x))
-
-                ;; To include extra information in the lagging
-                ;; tooltip, add it to the :document property like
-                ;; this:
-                ;;
-                ;; :document (cdr (assoc 'name x))
-                )))
+             (popup-make-item
+              (cdr (assoc 'mention_name x))
+              :summary (cdr (assoc 'name x))))
            y)))
     (ahn--nick-list room-name))))
 
 ;; (ahn--nick-candidates "all")
 
 (defvar ahn--current-room-candidates
-  "Local cache of the canidate nicks of the currently selected room."
-  nil)
+  nil
+  "Local cache of the canidate nicks of the currently selected room.")
+
+(defvar ahn--current-room
+  ""
+  "Local variable holding the current room")
 
 (defun ac-hipchat-nick-guess-room-and-update-nick-list ()
   "Guess which room we're in and update the completion candidates."
