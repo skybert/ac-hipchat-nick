@@ -48,6 +48,11 @@
   :type 'string
   :group 'ac-hipchat-nick)
 
+(defcustom ac-hipchat-nick-guess-room-by-buffer-name
+  t
+  "Guess the room you're in based on the buffer name."
+  :group 'ac-hipchat-nick)
+
 (defun ahn--fetch-json (url)
   "Fetches the URL and will return it as a JSON object."
   (with-current-buffer
@@ -150,6 +155,20 @@
 (defvar ahn--current-room-candidates
   "Local cache of the canidate nicks of the currently selected room."
   nil)
+
+(defun ac-hipchat-nick-guess-room-and-update-nick-list ()
+  "Guess which room we're in and update the completion candidates."
+  (interactive)
+  (if ac-hipchat-nick-guess-room-by-buffer-name
+      (let ((room-name (replace-regexp-in-string "[#]" "" (buffer-name))))
+        (if (not (string= room-name ahn--current-room))
+            (progn
+              (setq ahn--current-room room-name)
+              (message
+               "Guessing we're in room %s, updating nick list..."
+               room-name)
+              (ac-hipchat-nick-set-current-room room-name)))))
+  t)
 
 (defun ac-hipchat-nick-set-current-room (room)
   "Populate the nick completion list to the given ROOM."
