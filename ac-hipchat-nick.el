@@ -76,27 +76,27 @@
 
     (json-read-object)))
 
-(defun ahn--hipchat-add-auth (url)
+(defun ahn--add-auth (url)
   "Add auth parameter to the passed URL."
   (concat url "?auth_token=" ac-hipchat-nick-auth-token))
 
-(defun ahn--hipchat-all-rooms-url ()
+(defun ahn--all-rooms-url ()
   "Return the URL of all the rooms."
   (concat ac-hipchat-nick-url
           "/v2/room" "?auth_token="
           ac-hipchat-nick-auth-token))
 
-(defun ahn--hipchat-room-list ()
+(defun ahn--room-list ()
   "Will return an list of all the room names and URLs."
   (mapcar
    (lambda (x)
      (cons (cdr (assoc 'name x))
            (cdr (assoc 'self (assoc 'links x)))))
-   (cdr (assoc 'items (ahn--fetch-json (ahn--hipchat-all-rooms-url))))))
+   (cdr (assoc 'items (ahn--fetch-json (ahn--all-rooms-url))))))
 
-;; (pp (ahn--hipchat-room-list))
+;; (pp (ahn--room-list))
 
-(defun ahn--hipchat-users-in-room (room-url)
+(defun ahn--users-in-room (room-url)
   "Return a list of alists with name & mention name for users in ROOM-URL."
   (mapcar
    (lambda (x)
@@ -105,9 +105,9 @@
       (assoc 'mention_name x)))
    (cdr
     (assoc 'participants
-           (ahn--fetch-json (ahn--hipchat-add-auth room-url))))))
+           (ahn--fetch-json (ahn--add-auth room-url))))))
 
-(defun ahn--hipchat-nick-list (room-name)
+(defun ahn--nick-list (room-name)
   "Return nick list of the participants in ROOM-NAME."
   (let (result-list
         (tmp-list
@@ -115,8 +115,8 @@
           (lambda (x)
             (if (string= (downcase (car x))
                          (downcase room-name))
-                (ahn--hipchat-users-in-room (cdr x))))
-          (ahn--hipchat-room-list))))
+                (ahn--users-in-room (cdr x))))
+          (ahn--room-list))))
 
     ;; Create result list without nil elements.
     (while tmp-list
@@ -124,15 +124,15 @@
         (if head (push head result-list))))
     result-list))
 
-;; (ahn--hipchat-nick-list "all")
+;; (ahn--nick-list "all")
 
-(defun ahn--hipchat-nick-candidates (room-name)
+(defun ahn--nick-candidates (room-name)
   "Create a list of nicks and user names in ROOM-NAME."
   (car
    (mapcar
     (lambda (y)
       ;; Only create popup items of the non-nil elements returned from
-      ;; ahn--hipchat-nick-list
+      ;; ahn--nick-list
       (if y
           (mapcar
            (lambda (x)
@@ -148,9 +148,9 @@
                 ;; :document (cdr (assoc 'name x))
                 )))
            y)))
-    (ahn--hipchat-nick-list room-name))))
+    (ahn--nick-list room-name))))
 
-;; (ahn--hipchat-nick-candidates "all")
+;; (ahn--nick-candidates "all")
 
 (defvar ahn--current-room-candidates
   "Local cache of the canidate nicks of the currently selected room."
@@ -173,7 +173,7 @@
 (defun ac-hipchat-nick-set-current-room (room)
   "Populate the nick completion list to the given ROOM."
   (interactive "sRoom name: ")
-  (setq ahn--current-room-candidates (ahn--hipchat-nick-candidates room))
+  (setq ahn--current-room-candidates (ahn--nick-candidates room))
   t)
 
 ;; (ac-hipchat-nick-set-current-room "all")
