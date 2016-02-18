@@ -30,7 +30,6 @@
 
 (require 'auto-complete)
 (require 'json)
-(require 's)
 
 (defgroup ac-hipchat-nick nil
   "Auto completion of HipChat nicks (mention names)."
@@ -89,14 +88,11 @@
 
 (defun ahn--room-list ()
   "Will return an list of all the room names and URLs."
-  (if ahn--room-list-cache
-      ahn--room-list-cache
-    (setq ahn--room-list-cache
-          (mapcar
-           (lambda (x)
-             (cons (cdr (assoc 'name x))
-                   (cdr (assoc 'self (assoc 'links x)))))
-           (cdr (assoc 'items (ahn--fetch-json (ahn--all-rooms-url))))))))
+  (mapcar
+   (lambda (x)
+     (cons (cdr (assoc 'name x))
+           (cdr (assoc 'self (assoc 'links x)))))
+   (cdr (assoc 'items (ahn--fetch-json (ahn--all-rooms-url))))))
 
 ;; (pp (ahn--room-list))
 
@@ -111,81 +107,64 @@
     (assoc 'participants
            (ahn--fetch-json (ahn--add-auth room-url))))))
 
-;; (pp (ahn--users-in-room "https://api.hipchat.com/v2/room/nnnn"))
-
 (defun ahn--nick-list (room-name)
   "Return nick list of the participants in ROOM-NAME."
-  (car (remq nil
-        (mapcar
-         (lambda (x)
-           (if (string= (downcase (car x))
-                        (downcase room-name))
-               (ahn--users-in-room (cdr x))))
-         (ahn--room-list)))))
+  (let (result-list
+        (tmp-list
+         (mapcar
+          (lambda (x)
+            (if (string= (downcase (car x))
+                         (downcase room-name))
+                (ahn--users-in-room (cdr x))))
+          (ahn--room-list))))
+
+    ;; Create result list without nil elements.
+    (while tmp-list
+      (let ((head (pop tmp-list)))
+        (if head (push head result-list))))
+    result-list))
 
 ;; (ahn--nick-list "all")
 
 (defun ahn--nick-candidates (room-name)
   "Create a list of nicks and user names in ROOM-NAME."
-  (mapcar
-   (lambda (x)
-     (popup-make-item
-      (cdr (assoc 'mention_name x))
-      :summary (cdr (assoc 'name x))))
-   (ahn--nick-list room-name)))
+  (car
+   (mapcar
+    (lambda (y)
+      ;; Only create popup items of the non-nil elements returned from
+      ;; ahn--nick-list
+      (if y
+          (mapcar
+           (lambda (x)
+             (popup-make-item
+              (cdr (assoc 'mention_name x))
+              :summary (cdr (assoc 'name x))))
+           y)))
+    (ahn--nick-list room-name))))
 
-;; (pp (ahn--nick-candidates "all"))
+;; (ahn--nick-candidates "all")
 
 (defvar ahn--current-room-candidates
   nil
   "Local cache of the canidate nicks of the currently selected room.")
 
-(defvar ahn--room-list-cache
-  nil
-  "Local cache of the room list")
-
 (defvar ahn--current-room
   ""
   "Local variable holding the current room")
-
-(defun ac-hipchat-nick-clear-caches ()
-  "Clear the caches."
-  (interactive)
-  (setq ahn--room-list-cache nil))
-
-(defun ahn--guess-room (local-room-name)
-  "Guess the HipChat room based on the LOCAL-ROOM-NAME."
-  (car
-   (remq nil (mapcar
-              (lambda (x)
-                (if (s-starts-with?
-                     (downcase local-room-name)
-                     (downcase (car x)))
-                    (car x)))
-              (ahn--room-list)))))
-
-;; (ahn--guess-room "support")
 
 (defun ac-hipchat-nick-guess-room-and-update-nick-list ()
   "Guess which room we're in and update the completion candidates."
   (interactive)
   (if ac-hipchat-nick-guess-room-by-buffer-name
-      (let ((local-room-name
-             (replace-regexp-in-string "[#]" "" (buffer-name))))
-        (let ((room-name (ahn--guess-room local-room-name)))
-          (if (and room-name
-                   (not (string= room-name ahn--current-room)))
-              (progn
-                (setq ahn--current-room room-name)
-                (message
-                 "Guessing WE're in room %s, updating nick list..."
-                 room-name)
-                (ac-hipchat-nick-set-current-room room-name)))
-          (message "Couldn't guess room from %s" local-room-name))
-        t)))
-
-;; (ac-hipchat-nick-guess-room-and-update-nick-list)
-
+      (let ((room-name (replace-regexp-in-string "[#]" "" (buffer-name))))
+        (if (not (string= room-name ahn--current-room))
+            (progn
+              (setq ahn--current-room room-name)
+              (message
+               "Guessing we're in room %s, updating nick list..."
+               room-name)
+              (ac-hipchat-nick-set-current-room room-name)))))
+  t)
 
 (defun ac-hipchat-nick-set-current-room (room)
   "Populate the nick completion list to the given ROOM."
